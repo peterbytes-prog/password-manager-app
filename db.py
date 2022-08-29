@@ -1,105 +1,111 @@
 """ hnadle db communications """
+import sqlite3
 
+class DBSQL():
+    def __init__(self):
+        self.conn = self.connectDB()
+        self.createTable()
+    def connectDB(self):
+        conn = None
+        try:
+            conn = sqlite3.connect('password_app.db')
+        except Exception as e:
+            print(e)
+        return conn
 
-class DB():
-    """ simulate db or db wrapper """
-    def __init__(self, *args, **kwargs):
-        self.users = { #dummy data
-                        "100":{
-                            "username": "Janet Jackson",
-                            "password": "janetjackson"
-                        },
-                        "101":{
-                            "username": "Charlie D",
-                            "password": "charlesdarwin"
-                        }
-                    }
-        self.passwords = {
-            "1":{
-                "site": 'google.com',
-                "username":"janetjackson",
-                "password":"janetjackson",
-                "note": "google acount One",
-                "reminder": "01-28-2022",
-                "user":"100"
-            },
-            "2":{
-                "site": 'yahoo.com',
-                "username":"janetjackson",
-                "password":"yahoojacksonpsw",
-                "note": "",
-                "reminder": "03-09-2023",
-                "user":"100"
-            },
-            "3":{
-                "site": 'home wifi',
-                "username":"localhost",
-                "password":"0101000",
-                "note": "telus provider",
-                "reminder": "05-01-2021",
-                "user":"100"
-            },
-            "4":{
-                "site": 'safe locker',
-                "username":"",
-                "password":"0-8-1",
-                "note": "for work",
-                "reminder": "",
-                "user":"101"
-            }
-        }
+    def createTable(self):
+        """ create user table, password table"""
+        user_stmt = """CREATE TABLE IF NOT EXISTS users (
+            username CHAR(20) NOT NULL,
+            password TEXT NOT NULL,
+            email CHAR(50)
+        );
+        """
+        password_stmt = """CREATE TABLE IF NOT EXISTS passwords (
+            site TEXT NOT NULL,
+            username TEXT NOT NULL,
+            password TEXT NOT NULL,
+            note TEXT,
+            remainder TEXT,
+            user_id INT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users (rowid)
+        );
+        """
+        c = self.conn.cursor()
+        c.execute(user_stmt)
+        c.execute(password_stmt)
+        return True
+    def createNewUser(self, **kwargs):
+        """ insert new user data to data """
+        stmt = """INSERT INTO users (username, password, email) VALUES(?,?,?)"""
+        cur = self.conn.cursor()
+        cur.execute(stmt, (kwargs['username'], kwargs['password'],kwargs.get('email')))
+        self.conn.commit()
+        return cur.lastrowid
     def getUserId(self, username, password):
         """ fecth user using cred """
-        for _id, detail in self.users.items():
-            if detail['username'] == username and detail['password'] == password:
-                return _id
-        return None
-    def getUserInfo(self, _id):
-        """ get user from data using _id"""
-        return self.users.get(_id, {})
-
-    def createNewUser(self, username, password):
-        """ insert new user data to data """
-        _id = str(100+len(self.users))
-        self.users.update({
-                _id : {
-                    'username': username,
-                    'password': password
-                }
-        })
-        return _id
+        stmt = "SELECT rowid FROM users WHERE username=? AND password=? LIMIT 1"
+        cur = self.conn.cursor()
+        cur.execute(stmt, (username,password))
+        row = cur.fetchone()
+        return row
     def createNewPassword(self, user_id, data):
         """ insert new user data to data """
-        _id = str(len(self.passwords)+1)
-        self.passwords.update({
-                _id : {**data, 'user':user_id},
-        })
-        return _id
-
+        stmt = """INSERT INTO passwords (site, username, password, note, remainder, user_id) VALUES (?,?,?,?,?,?)"""
+        cur = self.conn.cursor()
+        cur.execute(stmt, (data.get('site'),data.get('username'),data.get('password'), data.get('note'),data.get('reminder',""),user_id))
+        self.conn.commit()
+        return cur.lastrowid
     def getAllUserPassword(self,user_id):
         """ get password for user with user_id """
+        stmt = """SELECT `rowid`, `site`, `username`,`password`, `note`, `remainder` FROM passwords WHERE user_id=?"""
+        cur = self.conn.cursor()
+        cur.execute(stmt, (user_id,))
+        rows = cur.fetchall()
         passwords = {}
-        for _id, password_detail in self.passwords.items():
-            if password_detail.get('user') == user_id:
-                passwords[_id] = password_detail
+        for row in rows:
+            mapped = {
+                'site':row[1],
+                'username':row[2],
+                'password':row[3],
+                'note':row[4],
+                'remainder':row[5]
+            }
+            passwords[str(row[0])] = mapped
         return passwords
     def getPasswordDetail(self, user_id, psw_id):
         """ retrive user password with matching psw_id"""
         passwords = self.getAllUserPassword(user_id)
-        return passwords.get(psw_id, {})
+        if len(passwords)>0:
+            return passwords.get(psw_id)
+        return None
     def updatePassword(self, user_id, psw_id, data):
         """ update password for user if it exit """
-        passwords = self.getAllUserPassword(user_id)
-        password = passwords.get(psw_id, {})
-        if password:
-            self.passwords.update({
-                psw_id : {**data, 'user':user_id},
-        })
-        return psw_id
+        vals = []
+        temp = ""
+        for key,val in data.items():
+            if len(temp):
+                temp += ", "
+            temp += f"{key}=?"
+            vals.append(val)
+        vals.extend([user_id,psw_id])
+        stmt = f"""UPDATE passwords SET {temp} WHERE user_id=? AND rowid=?"""
+        cur = self.conn.cursor()
+        cur.execute(stmt, tuple(vals))
+        self.conn.commit()
+        return cur.lastrowid
     def deletePassword(self, user_id, psw_id):
         """ update password for user if it exit """
-        passwords = self.getAllUserPassword(user_id)
-        password = passwords.get(psw_id, {})
-        if password:
-            del self.passwords[psw_id]
-        return psw_id
+        stmt = 'DELETE FROM passwords WHERE rowid=? AND user_id=?'
+        cur = self.conn.cursor()
+        cur.execute(stmt, (psw_id, user_id))
+        self.conn.commit()
+        return True
+
+
+
+
+
+if __name__ == '__main__':
+    db = DBSQL()
+    print(db.conn)

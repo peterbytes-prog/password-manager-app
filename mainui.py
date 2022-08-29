@@ -1,5 +1,5 @@
 """ Simulate Ui With terminal prompts"""
-from db import DB
+from db import DBSQL
 from pprint import pprint
 
 
@@ -12,7 +12,7 @@ def getAndValidateInput(prompt, validators, optional=False):
                 [function, error_message], ...
             ]
     """
-    
+
     while True:
         value = input(f"{prompt}: ")
         if not value and optional:
@@ -28,7 +28,7 @@ class UI(object):
         """ init app ui """
         self.user = None  #set user to none
         self.state = 'home'
-        self.db = DB()
+        self.db = DBSQL()
     def signIn(self):
         """ get username and password and get user from data if it exit"""
         while True:
@@ -38,12 +38,12 @@ class UI(object):
             password = getAndValidateInput(prompt = "Enter password", validators=[
                 [lambda x: len(x) > 3, "Password must be 3 characters or more"]
             ])
-            self.user = self.db.getUserId(username, password)
+            self.user = self.db.getUserId(username, password)[0]
             if self.user:
                 print(f"Welcome {username} !")
                 return
             print(" Wrong Username or password!. Please Try Again")
-           
+
     def signUp(self):
         username = getAndValidateInput(prompt = "Enter your prefer Username", validators=[
             [lambda x: len(x) > 3, "Username must be 3 characters or more"]
@@ -54,8 +54,8 @@ class UI(object):
         password2 = getAndValidateInput(prompt = "Confirm password", validators=[
             [lambda x: x == password1, "Password must match"]
         ])
-        self.user = self.db.createNewUser(username, password2)
-        print("Your account has been created!")
+        self.user = self.db.createNewUser(username=username, password=password2)
+        print("Your account has been created!", self.user)
 
     def signOut(self):
         """ sign out user by setting app user to none """
@@ -63,7 +63,7 @@ class UI(object):
         self.state = 'home'
         print("You've successfully signed Out")
         return
-    
+
     def addNewPassword(self):
         """ get new password info"""
         site = getAndValidateInput(prompt = "Enter Password site(url) or name", validators=[], optional=True)
@@ -77,14 +77,14 @@ class UI(object):
         notes = getAndValidateInput(prompt = "Notes or Descriptions", validators=[], optional=True)
         reset_reminder = getAndValidateInput(prompt = "Enter reset reminder date (dd-mm-yyyy)", validators=[
             [
-                lambda x: len(x.split('-'))==3 and len(x.split('-')[0])==2 and len(x.split('-')[1])==2 and len(x.split('-')[2])==4, 
+                lambda x: len(x.split('-'))==3 and len(x.split('-')[0])==2 and len(x.split('-')[1])==2 and len(x.split('-')[2])==4,
                 "Please Check Your Date format, and try again"
             ]
         ], optional=True)
         new_psw_id = self.db.createNewPassword(user_id=self.user, data={
                 "site": site,
                 "username":username,
-                "password2":password2,
+                "password":password2,
                 "note": notes,
                 "reminder": reset_reminder
             })
@@ -100,7 +100,7 @@ class UI(object):
         if action in psw_ids:
             self.state = 'detail'
             self.getPasswordDetail(action)
-            pass 
+            pass
         elif action == 'e':
             self.state = 'home'
     def getPasswordDetail(self, psw_id):
@@ -111,7 +111,7 @@ class UI(object):
         action = input("Press (e) to Edit This Password, Or Press (d) to Delete This Password, Or Press (l) to go back to LIST page, Or Press (h) to go back to HOME page: ")
         if not self.inputHandler(action):
             if action == 'd':
-                self.deletePassword(psw_id) 
+                self.deletePassword(psw_id)
             elif action == 'e':
                 self.editPassword(psw_id)
     def deletePassword(self, psw_id):
